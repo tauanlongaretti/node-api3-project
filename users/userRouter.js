@@ -2,6 +2,8 @@ const express = require('express');
 
 const userDb = require('./userDb.js');
 
+const postDb = require('../posts/postDb.js');
+
 const router = express.Router();
 
 // POST - New user
@@ -22,23 +24,16 @@ router.post('/', (req, res) => {
 });
 
 // POST - New post 
-router.post('/:id/posts', (req, res) => {
-  const {id} = req.params
-  const postInfo = req.body
+router.post('/:id/posts', [validateUserId, validatePost], (req, res) => {
+  const postInfo = { ...req.body, user_id: req.params.id }
 
-  userDb.insert(postInfo)
+  postDb.insert(postInfo)
     .then(post => {
-      if (post) {
-        res.status(404).json({ message: "The user with the specified ID does not exist" })
-      } else if (!postInfo) {
-        res.status(400).json({ errorMessage: "Please provide content for the post" })
-      } else {
-        res.status(200).json({ post })
-      }
-    })
+        res.status(201).json(post)
+      })
     .catch(() => {
       res.status(500).json({ errorMessage: "It was not possible to create this post" })
-    })
+    })  
 });
 
 // GET - Get all users
@@ -87,14 +82,11 @@ router.get('/:id/posts', (req, res) => {
 });
 
 // DELETE - Remove user from database
-router.delete('/:id', (req, res) => {
-  const {id} = req.params
+router.delete('/:id', validateUserId, (req, res) => {
 
-  userDb.remove(id)
-    .then(() => {
-      if (!id) {
-        res.status(404).json({ message: "The user could not be found"}); 
-      } else {
+  userDb.remove(req.params.id)
+    .then(count => {
+      if (count > 0) {
         res.status(200).json({ message: "The user has been removed"});
       }
     })
@@ -104,7 +96,7 @@ router.delete('/:id', (req, res) => {
 });
 
 // PUT - Update user
-router.put('/:id', (req, res) => {
+router.put('/:id', [validateUserId, validateUser], (req, res) => {
   const {id} = req.params
   const changes = req.body
 
@@ -124,15 +116,43 @@ router.put('/:id', (req, res) => {
 //custom middleware
 
 function validateUserId(req, res, next) {
-  // do your magic!
+  const {id} = req.params;
+  userDb.getById(id)
+    .then(user => {
+      if (user) {
+        req.user = user;
+        next(); 
+        } else {
+          next({ message: "user ID not found" })
+        }
+    })
+    .catch(() => {
+      res.status(500).json({ message: "There was a poblem finding the user"})
+    })
 }
 
 function validateUser(req, res, next) {
-  // do your magic!
+  const body = req.body;
+
+    if (!body && body === {}) {
+       res.status(400).json({ message: "missing user data" })
+     } else if (!body.name) {
+       res.status(400).json({ message: "missing required name field" })
+     } else {
+       next();
+     }
 }
 
 function validatePost(req, res, next) {
-  // do your magic!
+  const body = req.body;
+
+    if (!body && body === {}) {
+       res.status(400).json({ message: "missing user data" })
+     } else if (!body.text) {
+       res.status(400).json({ message: "missing required text field" })
+     } else {
+       next();
+     }
 }
 
 module.exports = router;
